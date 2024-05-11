@@ -55,7 +55,7 @@ class Simple3DPoseBaseSMPLCam(nn.Module):
             x = tm.resnet50(pretrained=True)
             self.feature_channel = 2048
         elif kwargs['NUM_LAYERS'] == 34:
-            x = tm.resnet34(pretrained=True)
+            x = tm.resnet34(pretrained=False)
             self.feature_channel = 512
         elif kwargs['NUM_LAYERS'] == 18:
             x = tm.resnet18(pretrained=True)

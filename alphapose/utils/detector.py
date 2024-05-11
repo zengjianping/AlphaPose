@@ -164,7 +164,9 @@ class DetectionLoader():
 
                 imgs.append(img_k)
                 orig_imgs.append(orig_img_k)
-                im_names.append(os.path.basename(im_name_k))
+                #im_name = os.path.basename(im_name_k)
+                im_name = os.path.relpath(im_name_k, self.img_dir)
+                im_names.append(im_name)
                 im_dim_list.append(im_dim_list_k)
 
             with torch.no_grad():

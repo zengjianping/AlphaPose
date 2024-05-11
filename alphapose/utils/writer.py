@@ -184,7 +184,9 @@ class DataWriter():
             cv2.imshow("AlphaPose Demo", img)
             cv2.waitKey(30)
         if self.opt.save_img:
-            cv2.imwrite(os.path.join(self.opt.outputpath, 'vis', im_name), img)
+            image_path = os.path.join(self.opt.outputpath, 'vis', im_name)
+            os.makedirs(os.path.dirname(image_path), exist_ok=True)
+            cv2.imwrite(image_path, img)
         if self.save_video:
             stream.write(img)
 
