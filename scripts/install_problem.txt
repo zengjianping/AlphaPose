@@ -1,5 +1,6 @@
-pip install easydict halpecocotools munkres natsort opencv-python pyyaml scipy tensorboardx terminaltables timm tqdm visdom jinja2 typeguard
 
-pip install halpecocotools
+pip install cython==0.27.3
+
+pip install easydict halpecocotools munkres natsort opencv-python pyyaml scipy tensorboardx terminaltables timm tqdm visdom jinja2 typeguard
 
 pip install "numpy<1.24"
