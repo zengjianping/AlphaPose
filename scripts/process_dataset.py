@@ -11,11 +11,12 @@ def parse_args():
     parser.add_argument('--input-path', type=str, default=None, help='input path')
     parser.add_argument('--output-path', type=str, default=None, help='output path')
     parser.add_argument('--data-prefix', type=str, default=None, help='data prefix')
+    parser.add_argument('--pad-ratio', type=float, default=0.0, help='pad ratio')
 
     args = parser.parse_args()
     return args
 
-def preprocess_coco_dataset(input_file):
+def generate_image_list(input_file):
     coco_data = json.loads(open(input_file, 'r').read())
     image_infos = coco_data['images']
 
@@ -29,46 +30,7 @@ def preprocess_coco_dataset(input_file):
         fil.write(f'{image_name}\n')
     fil.close()
 
-def split_coco_dataset(input_file, image_prefix):
-    coco_data = json.loads(open(input_file, 'r').read())
-    image_infos = coco_data['images']
-    annot_infos = coco_data['annotations']
-
-    for image_info in image_infos:
-        image_info['file_name'] = image_info['file_name'][len(image_prefix):]
-
-    num_train_images = int(len(image_infos) * 0.8)
-    train_image_infos = image_infos[0:num_train_images]
-    val_image_infos = image_infos[num_train_images:]
-    train_image_ids = set([info['id'] for info in train_image_infos])
-
-    train_annot_infos = list()
-    val_annot_infos = list()
-    for annot_info in annot_infos:
-        if annot_info['image_id'] in train_image_ids:
-            train_annot_infos.append(annot_info)
-        else:
-            val_annot_infos.append(annot_info)
-    
-    train_coco_data = copy.deepcopy(coco_data)
-    train_coco_data['images'] = train_image_infos
-    train_coco_data['annotations'] = train_annot_infos
-    val_coco_data = copy.deepcopy(coco_data)
-    val_coco_data['images'] = val_image_infos
-    val_coco_data['annotations'] = val_annot_infos
-
-    data_dir = os.path.dirname(input_file)
-    train_file = os.path.join(data_dir, 'train.json')
-    fil = open(train_file, 'w', encoding='utf-8')
-    json.dump(train_coco_data, fil, ensure_ascii=False, indent=4)
-    fil.close()
-
-    val_file = os.path.join(data_dir, 'val.json')
-    fil = open(val_file, 'w', encoding='utf-8')
-    json.dump(val_coco_data, fil, ensure_ascii=False, indent=4)
-    fil.close()
-
-def process_coco_dataset(input_file, output_file):
+def convert_algodet_result(input_file, output_file):
     coco_data = json.loads(open(input_file, 'r').read())
     coco_data.pop('annotations')
 
@@ -135,14 +97,108 @@ def process_coco_dataset(input_file, output_file):
     json_str = json.dumps(coco_data, ensure_ascii=False, indent=4)
     open(output_file, 'w').write(json_str)
 
+def limit_bbox(bbox, img_w, img_h):
+    left, top = bbox[0:2]
+    width, height = bbox[2:4]
+    right = left + width
+    bottom = top + height
+    left = max(left, 0)
+    right = min(right, img_w)
+    top = max(top, 0)
+    bottom = min(bottom, img_h)
+    bbox[0] = left
+    bbox[1] = top
+    bbox[2] = right - left
+    bbox[3] = bottom - top
+
+def convert_dataset_pose2det(input_file, output_file, pad_ratio=0.0):
+    coco_data = json.loads(open(input_file, 'r').read())
+
+    categories = coco_data['categories']
+    categories = [category for category in categories if category['id'] == 1]
+    coco_data['categories'] = categories
+
+    image_infos = coco_data['images']
+    image_infos = dict([(image_info['id'], image_info) for image_info in image_infos])
+
+    annotations = coco_data['annotations']
+    for annotation in annotations:
+        annotation.pop('keypoints')
+        annotation['category_id'] = 1
+        bbox = annotation['bbox']
+        if pad_ratio > 0.0:
+            width, height = bbox[2:4]
+            bbox[0] -= width * pad_ratio/2
+            bbox[1] -= height * pad_ratio/2
+            bbox[2] += width * pad_ratio
+            bbox[3] += height * pad_ratio
+        image_info = image_infos[annotation['image_id']]
+        img_w, img_h = image_info['width'], image_info['height']
+        limit_bbox(bbox, img_w, img_h)
+
+    json_str = json.dumps(coco_data, ensure_ascii=False, indent=4)
+    open(output_file, 'w').write(json_str)
+
+def split_coco_dataset(input_file, image_prefix, pad_ratio=0.0):
+    coco_data = json.loads(open(input_file, 'r').read())
+    image_infos = coco_data['images']
+    annotations = coco_data['annotations']
+
+    for image_info in image_infos:
+        image_info['file_name'] = image_info['file_name'][len(image_prefix):]
+    image_dict = dict([(image_info['id'], image_info) for image_info in image_infos])
+
+    num_train_images = int(len(image_infos) * 0.8)
+    train_image_infos = image_infos[0:num_train_images]
+    val_image_infos = image_infos[num_train_images:]
+    train_image_ids = set([info['id'] for info in train_image_infos])
+
+    train_annotations = list()
+    val_annotations = list()
+    for annotation in annotations:
+        bbox = annotation['bbox']
+        if pad_ratio > 0.0:
+            width, height = bbox[2:4]
+            bbox[0] -= width * pad_ratio/2
+            bbox[1] -= height * pad_ratio/2
+            bbox[2] += width * pad_ratio
+            bbox[3] += height * pad_ratio
+        image_info = image_dict[annotation['image_id']]
+        img_w, img_h = image_info['width'], image_info['height']
+        limit_bbox(bbox, img_w, img_h)
+        if annotation['image_id'] in train_image_ids:
+            train_annotations.append(annotation)
+        else:
+            val_annotations.append(annotation)
+    
+    train_coco_data = copy.deepcopy(coco_data)
+    train_coco_data['images'] = train_image_infos
+    train_coco_data['annotations'] = train_annotations
+    val_coco_data = copy.deepcopy(coco_data)
+    val_coco_data['images'] = val_image_infos
+    val_coco_data['annotations'] = val_annotations
+
+    data_dir = os.path.dirname(input_file)
+    train_file = os.path.join(data_dir, 'train.json')
+    fil = open(train_file, 'w', encoding='utf-8')
+    json.dump(train_coco_data, fil, ensure_ascii=False, indent=4)
+    fil.close()
+
+    val_file = os.path.join(data_dir, 'val.json')
+    fil = open(val_file, 'w', encoding='utf-8')
+    json.dump(val_coco_data, fil, ensure_ascii=False, indent=4)
+    fil.close()
+
 def main():
     args = parse_args()
     if args.work_mode == 0:
-        preprocess_coco_dataset(args.input_path)
+        generate_image_list(args.input_path)
     elif args.work_mode == 1:
-        process_coco_dataset(args.input_path, args.output_path)
+        convert_algodet_result(args.input_path, args.output_path)
     elif args.work_mode == 2:
-        split_coco_dataset(args.input_path, args.data_prefix)
+        convert_dataset_pose2det(args.input_path, args.output_path)
+    elif args.work_mode == 3:
+        split_coco_dataset(args.input_path, args.data_prefix, args.pad_ratio)
 
 if __name__ == '__main__':
     main()
