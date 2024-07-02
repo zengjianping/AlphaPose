@@ -1,5 +1,5 @@
 import os, sys, time, json
-import copy
+import copy, cv2
 import numpy as np
 from argparse import ArgumentParser
 
@@ -111,11 +111,16 @@ def limit_bbox(bbox, img_w, img_h):
     bbox[2] = right - left
     bbox[3] = bottom - top
 
-def convert_dataset_pose2det(input_file, output_file, pad_ratio=0.0):
+def convert_dataset_pose2detection(image_prefix, input_file, output_file, pad_ratio=0.0):
     coco_data = json.loads(open(input_file, 'r').read())
 
-    categories = coco_data['categories']
-    categories = [category for category in categories if category['id'] == 1]
+    categories = list()
+    for category in coco_data['categories']:
+        if category['name'] == 'golf_pose':
+            categories.append(category)
+            categories[0]['name'] = 'person'
+            categories[0]['id'] = 1
+            break
     coco_data['categories'] = categories
 
     image_infos = coco_data['images']
@@ -123,7 +128,6 @@ def convert_dataset_pose2det(input_file, output_file, pad_ratio=0.0):
 
     annotations = coco_data['annotations']
     for annotation in annotations:
-        annotation.pop('keypoints')
         annotation['category_id'] = 1
         bbox = annotation['bbox']
         if pad_ratio > 0.0:
@@ -135,6 +139,113 @@ def convert_dataset_pose2det(input_file, output_file, pad_ratio=0.0):
         image_info = image_infos[annotation['image_id']]
         img_w, img_h = image_info['width'], image_info['height']
         limit_bbox(bbox, img_w, img_h)
+
+    json_str = json.dumps(coco_data, ensure_ascii=False, indent=4)
+    open(output_file, 'w').write(json_str)
+
+def convert_dataset_pose2golfclub(image_prefix, input_file, output_file, pad_ratio=0.0, 
+                                  verbose=False):
+    coco_data = json.loads(open(input_file, 'r').read())
+
+    new_categories = list()
+    for category in coco_data['categories']:
+        if category['name'] == 'golf_pose':
+            new_category = copy.deepcopy(category)
+            new_category['name'] = 'golf_club'
+            new_category['id'] = 1
+            new_category['keypoints'] = ['golf_club_head', 'golf_club_tail']
+            new_category['skeleton'] = [['golf_club_head', 'golf_club_tail']]
+            new_categories.append(new_category)
+            break
+    coco_data['categories'] = new_categories
+
+    image_infos = coco_data['images']
+    image_infos = dict([(image_info['id'], image_info) for image_info in image_infos])
+
+    new_annotations = list()
+    for annotation in coco_data['annotations']:
+        new_annotation = copy.deepcopy(annotation)
+        keypoints = new_annotation['keypoints'][84:90]
+        if keypoints[2] > 0 and keypoints[5] > 0:
+            image_info = image_infos[new_annotation['image_id']]
+            img_w, img_h = image_info['width'], image_info['height']
+            new_annotation['category_id'] = 1
+            new_annotation['keypoints'] = keypoints
+            new_annotation['num_keypoints'] = 2
+            xs = min(keypoints[0], keypoints[3])
+            xe = max(keypoints[0], keypoints[3])
+            ys = min(keypoints[1], keypoints[4])
+            ye = max(keypoints[1], keypoints[4])
+            bw, bh = xe-xs, ye-ys
+            bbox = [xs-2, ys-2, bw+4, bh+4]
+            if bw < 10 and bh < 10:
+                print(keypoints)
+                if verbose:
+                    file_path = os.path.join('/data/ModelTrainData', image_info['file_name'])
+                    image = cv2.imread(file_path, cv2.IMREAD_COLOR)
+                    pt1 = [int(bbox[0]), int(bbox[1])]
+                    pt2 = [int(bbox[0]+bbox[2]), int(bbox[1]+bbox[3])]
+                    cv2.rectangle(image, pt1, pt2, (255,0,0), 2)
+                    pt1 = [int(x) for x in keypoints[0:2]]
+                    pt2 = [int(x) for x in keypoints[3:5]]
+                    cv2.line(image, pt1, pt2, (0,0,255), 2)
+                    cv2.imshow('test', image)
+                    cv2.waitKey(0)
+                continue
+            if pad_ratio > 0.0:
+                width, height = bbox[2:4]
+                bbox[0] -= width * pad_ratio/2
+                bbox[1] -= height * pad_ratio/2
+                bbox[2] += width * pad_ratio
+                bbox[3] += height * pad_ratio
+            limit_bbox(bbox, img_w, img_h)
+            new_annotation['bbox'] = bbox
+            new_annotations.append(new_annotation)
+    coco_data['annotations'] = new_annotations
+
+    json_str = json.dumps(coco_data, ensure_ascii=False, indent=4)
+    open(output_file, 'w').write(json_str)
+
+def convert_dataset_pose2halpe28(image_prefix, input_file, output_file, pad_ratio=0.0, 
+                                  verbose=False):
+    coco_data = json.loads(open(input_file, 'r').read())
+
+    new_categories = list()
+    for category in coco_data['categories']:
+        if category['name'] == 'golf_pose':
+            new_category = copy.deepcopy(category)
+            new_category['name'] = 'person'
+            new_category['id'] = 1
+            new_category['keypoints'] = [str(i) for i in range(28)]
+            new_category['skeleton'] = [line for line in new_category['skeleton'] \
+                                        if line != [30, 29]]
+            new_categories.append(new_category)
+            break
+    coco_data['categories'] = new_categories
+
+    image_infos = coco_data['images']
+    image_infos = dict([(image_info['id'], image_info) for image_info in image_infos])
+
+    new_annotations = list()
+    for annotation in coco_data['annotations']:
+        new_annotation = copy.deepcopy(annotation)
+        keypoints = new_annotation['keypoints'][0:84]
+        image_info = image_infos[new_annotation['image_id']]
+        img_w, img_h = image_info['width'], image_info['height']
+        new_annotation['category_id'] = 1
+        new_annotation['keypoints'] = keypoints
+        new_annotation['num_keypoints'] = 28
+        bbox = new_annotation['bbox']
+        if pad_ratio > 0.0:
+            width, height = bbox[2:4]
+            bbox[0] -= width * pad_ratio/2
+            bbox[1] -= height * pad_ratio/2
+            bbox[2] += width * pad_ratio
+            bbox[3] += height * pad_ratio
+        limit_bbox(bbox, img_w, img_h)
+        new_annotation['bbox'] = bbox
+        new_annotations.append(new_annotation)
+    coco_data['annotations'] = new_annotations
 
     json_str = json.dumps(coco_data, ensure_ascii=False, indent=4)
     open(output_file, 'w').write(json_str)
@@ -196,8 +307,12 @@ def main():
     elif args.work_mode == 1:
         convert_algodet_result(args.input_path, args.output_path)
     elif args.work_mode == 2:
-        convert_dataset_pose2det(args.input_path, args.output_path)
+        convert_dataset_pose2detection(args.data_prefix, args.input_path, args.output_path)
     elif args.work_mode == 3:
+        convert_dataset_pose2golfclub(args.data_prefix, args.input_path, args.output_path)
+    elif args.work_mode == 4:
+        convert_dataset_pose2halpe28(args.data_prefix, args.input_path, args.output_path)
+    elif args.work_mode == 5:
         split_coco_dataset(args.input_path, args.data_prefix, args.pad_ratio)
 
 if __name__ == '__main__':
