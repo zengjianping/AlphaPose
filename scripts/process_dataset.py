@@ -127,6 +127,7 @@ def convert_dataset_golfpose(image_prefix, input_file, output_file, pad_ratio=0.
     image_infos = coco_data['images']
     image_infos = dict([(image_info['id'], image_info) for image_info in image_infos])
 
+    num_invalids = 0
     new_annotations = list()
     for annotation in coco_data['annotations']:
         new_annotation = copy.deepcopy(annotation)
@@ -137,6 +138,15 @@ def convert_dataset_golfpose(image_prefix, input_file, output_file, pad_ratio=0.
             if keypoints[i*3] == 0 and keypoints[i*3+1] == 0:
                 keypoints[i*3+2] = 0
         bbox = new_annotation['bbox']
+        def check_bbox(bbox, keypoints, image_info):
+            if bbox[2] < 10 or bbox[3] < 10:
+                print(f'Invalid annotation: {bbox}')
+                return None
+            return bbox
+        bbox = check_bbox(bbox, keypoints, image_info)
+        if bbox is None:
+            num_invalids += 1
+            continue
         if pad_ratio > 0.0:
             width, height = bbox[2:4]
             bbox[0] -= width * pad_ratio/2
@@ -147,6 +157,7 @@ def convert_dataset_golfpose(image_prefix, input_file, output_file, pad_ratio=0.
         new_annotation['category_id'] = 1
         new_annotation['bbox'] = bbox
         new_annotations.append(new_annotation)
+    print(f'Number of invalid annotations: {num_invalids}')
     coco_data['annotations'] = new_annotations
 
     json_str = json.dumps(coco_data, ensure_ascii=False, indent=4)
@@ -245,6 +256,7 @@ def convert_dataset_halpe28(image_prefix, input_file, output_file, pad_ratio=0.0
     image_infos = dict([(image_info['id'], image_info) for image_info in image_infos])
 
     new_annotations = list()
+    num_invalids = 0
     for annotation in coco_data['annotations']:
         new_annotation = copy.deepcopy(annotation)
         image_info = image_infos[new_annotation['image_id']]
@@ -255,6 +267,15 @@ def convert_dataset_halpe28(image_prefix, input_file, output_file, pad_ratio=0.0
                 keypoints[i*3+2] = 0
         keypoints = new_annotation['keypoints'][0:84]
         bbox = new_annotation['bbox']
+        def check_bbox(bbox, keypoints, image_info):
+            if bbox[2] < 10 or bbox[3] < 10:
+                print(f'Invalid annotation: {bbox}')
+                return None
+            return bbox
+        bbox = check_bbox(bbox, keypoints, image_info)
+        if bbox is None:
+            num_invalids += 1
+            continue
         if pad_ratio > 0.0:
             width, height = bbox[2:4]
             bbox[0] -= width * pad_ratio/2
@@ -267,6 +288,7 @@ def convert_dataset_halpe28(image_prefix, input_file, output_file, pad_ratio=0.0
         new_annotation['num_keypoints'] = 28
         new_annotation['bbox'] = bbox
         new_annotations.append(new_annotation)
+    print(f'Number of invalid annotations: {num_invalids}')
     coco_data['annotations'] = new_annotations
 
     json_str = json.dumps(coco_data, ensure_ascii=False, indent=4)
