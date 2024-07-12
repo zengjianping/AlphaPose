@@ -183,6 +183,7 @@ def convert_dataset_golfclub(image_prefix, input_file, output_file, pad_ratio=0.
     image_infos = dict([(image_info['id'], image_info) for image_info in image_infos])
 
     new_annotations = list()
+    num_invalids = 0
     for annotation in coco_data['annotations']:
         new_annotation = copy.deepcopy(annotation)
         image_info = image_infos[new_annotation['image_id']]
@@ -201,7 +202,7 @@ def convert_dataset_golfclub(image_prefix, input_file, output_file, pad_ratio=0.
                 bw, bh = xe-xs, ye-ys
                 bbox = [xs-2, ys-2, bw+4, bh+4]
                 if bw < 10 and bh < 10:
-                    print(keypoints)
+                    print(f'Invalid annotation: {bbox}')
                     if verbose:
                         file_path = os.path.join('/data/ModelTrainData', image_info['file_name'])
                         image = cv2.imread(file_path, cv2.IMREAD_COLOR)
@@ -218,6 +219,7 @@ def convert_dataset_golfclub(image_prefix, input_file, output_file, pad_ratio=0.
             return None
         bbox = check_bbox(keypoints, image_info)
         if bbox is None:
+            num_invalids += 1
             continue
         if pad_ratio > 0.0:
             width, height = bbox[2:4]
@@ -230,7 +232,9 @@ def convert_dataset_golfclub(image_prefix, input_file, output_file, pad_ratio=0.
         new_annotation['keypoints'] = keypoints
         new_annotation['num_keypoints'] = 2
         new_annotation['bbox'] = bbox
+        new_annotation['area'] = bbox[2] * bbox[3]
         new_annotations.append(new_annotation)
+    print(f'Number of invalid annotations: {num_invalids}')
     coco_data['annotations'] = new_annotations
 
     json_str = json.dumps(coco_data, ensure_ascii=False, indent=4)

@@ -3,16 +3,16 @@
 WORK_MODE=0
 [[ $# -eq 1 ]] && WORK_MODE=$1
 
-DATA_DIR="/data/ModelTrainData/PoseData"3
+DATA_DIR="/data/ModelTrainData/PoseData"
 
 TASK_DIR="datas/golf_annotations/ezgolf_task_20240418_a01/annotations"
 DATA_PREFIX="PoseData/ezgolf/task_20240418/images/"
 
-#TASK_DIR="datas/golf_annotations/ezgolf_task_20240628/annotations"
-#DATA_PREFIX="PoseData/ezgolf/ezgolf_task_20240628/images/"
+TASK_DIR="datas/golf_annotations/ezgolf_task_20240628_a01/annotations"
+DATA_PREFIX="PoseData/ezgolf/task_20240628/images/"
 
-TASK_DIR="datas/golf_annotations/golfdb_a01/annotations"
-DATA_PREFIX="PoseData/golfdb/images/"
+#TASK_DIR="datas/golf_annotations/golfdb_a01/annotations"
+#DATA_PREFIX="PoseData/golfdb/images/"
 
 INPUT_FILE="${TASK_DIR}/person_keypoints_default.json"
 ALGRES_FILE="${TASK_DIR}/person_keypoints_result.json"
